@@ -13,6 +13,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Make `pread()` and `posix_fadvise()` available.
+#if !defined(_XOPEN_SOURCE) || _XOPEN_SOURCE < 600
+#undef _XOPEN_SOURCE
+#define _XOPEN_SOURCE 600
+#endif
+
+// Make `off_t` 64-bit even on 32-bit systems. Works for Android >= r15c.
+#undef _FILE_OFFSET_BITS
+#define _FILE_OFFSET_BITS 64
+
 // copybara:import_next_line:gemma_cpp
 #include "compression/blob_store.h"
 
@@ -81,7 +91,7 @@ static int64_t pwrite(int fd, const void* buf, uint64_t size, uint64_t offset) {
 }
 
 #endif
-}
+}  // namespace
 
 namespace gcpp {
 
@@ -133,6 +143,7 @@ struct IO {
       return 0;
     }
 #else
+    static_assert(sizeof(off_t) == 8, "64-bit off_t required");
     const off_t size = lseek(fd, 0, SEEK_END);
     HWY_ASSERT(close(fd) != -1);
     if (size == static_cast<off_t>(-1)) {
@@ -318,7 +329,8 @@ class BlobStore {
 BlobError BlobReader::Open(const char* filename) {
 #if HWY_OS_WIN
   DWORD flags = FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN;
-  HANDLE file = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, flags, nullptr);
+  HANDLE file = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ, nullptr,
+                            OPEN_EXISTING, flags, nullptr);
   if (file == INVALID_HANDLE_VALUE) return __LINE__;
   fd_ = _open_osfhandle(reinterpret_cast<intptr_t>(file), _O_RDONLY);
 #else
@@ -403,7 +415,8 @@ BlobError BlobWriter::WriteAll(hwy::ThreadPool& pool,
   // Create/replace existing file.
 #if HWY_OS_WIN
   DWORD flags = FILE_ATTRIBUTE_NORMAL;
-  HANDLE file = CreateFileA(filename, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, flags, nullptr);
+  HANDLE file = CreateFileA(filename, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                            flags, nullptr);
   if (file == INVALID_HANDLE_VALUE) return __LINE__;
   const int fd = _open_osfhandle(reinterpret_cast<intptr_t>(file), _O_WRONLY);
 #else
